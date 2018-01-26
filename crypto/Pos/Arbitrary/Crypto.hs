@@ -35,7 +35,6 @@ import           Pos.Crypto.Signing.Safe (PassPhrase, createProxyCert, createPsk
 import           Pos.Crypto.Signing.Types.Tag (SignTag (..))
 import           Pos.Util.Arbitrary (Nonrepeating (..), arbitraryUnsafe, runGen, sublistN)
 import           Pos.Util.Orphans ()
-import           Pos.Util.Verification (Ver (..))
 
 deriving instance Arbitrary ProtocolMagic
 
@@ -133,11 +132,11 @@ instance (HasCryptoConfiguration, Bi a, Arbitrary a) => Arbitrary (Signed a) whe
 instance (HasCryptoConfiguration, Bi w, Arbitrary w) => Arbitrary (ProxyCert w) where
     arbitrary = liftA3 createProxyCert arbitrary arbitrary arbitrary
 
-instance (HasCryptoConfiguration, Bi w, Arbitrary w) => Arbitrary (ProxySecretKey 'Ver w) where
+instance (HasCryptoConfiguration, Bi w, Arbitrary w) => Arbitrary (ProxySecretKey w) where
     arbitrary = liftA3 createPsk arbitrary arbitrary arbitrary
 
 instance (HasCryptoConfiguration, Bi w, Arbitrary w, Bi a, Arbitrary a) =>
-         Arbitrary (ProxySignature 'Ver w a) where
+         Arbitrary (ProxySignature w a) where
     arbitrary = do
         delegateSk <- arbitrary
         issuerSk <- arbitrary

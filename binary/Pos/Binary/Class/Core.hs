@@ -5,7 +5,10 @@
 -- | Bi typeclass and most basic functions.
 
 module Pos.Binary.Class.Core
-    ( Bi(..)
+    ( BiEnc(..)
+    , BiDec(..)
+    , label
+    , Bi
     , encodeBinary
     , decodeBinary
     , enforceSize
@@ -73,26 +76,30 @@ matchSize requestedSize lbl actualSize =
 
 ----------------------------------------
 
-class Typeable a => Bi a where
-    encode :: a -> E.Encoding
-    decode :: D.Decoder s a
+label :: Typeable a => Proxy a -> String
+label = show . typeRep
 
-    label :: Proxy a -> String
-    label = show . typeRep
+class Typeable a => BiEnc a where
+    encode :: a -> E.Encoding
 
     encodeList :: [a] -> E.Encoding
     encodeList = defaultEncodeList
 
+class Typeable a => BiDec a where
+    decode :: D.Decoder s a
+
     decodeList :: D.Decoder s [a]
     decodeList = defaultDecodeList
 
+type Bi a = (BiEnc a, BiDec a)
+
 -- | Default @'E.Encoding'@ for list types.
-defaultEncodeList :: Bi a => [a] -> E.Encoding
+defaultEncodeList :: BiEnc a => [a] -> E.Encoding
 defaultEncodeList xs = E.encodeListLenIndef
                     <> Universum.foldr (\x r -> encode x <> r) E.encodeBreak xs
 
 -- | Default @'D.Decoder'@ for list types.
-defaultDecodeList :: Bi a => D.Decoder s [a]
+defaultDecodeList :: BiDec a => D.Decoder s [a]
 defaultDecodeList = do
     D.decodeListLenIndef
     D.decodeSequenceLenIndef (flip (:)) [] reverse decode
@@ -101,23 +108,26 @@ defaultDecodeList = do
 -- Primitive types
 ----------------------------------------------------------------------------
 
-instance Bi () where
+instance BiEnc () where
     encode = const E.encodeNull
+instance BiDec () where
     decode = D.decodeNull
 
-instance Bi Bool where
+instance BiEnc Bool where
     encode = E.encodeBool
+instance BiDec Bool where
     decode = D.decodeBool
 
-instance Bi Char where
+instance BiEnc Char where
     encode c = E.encodeString (Text.singleton c)
+    -- For [Char]/String we have a special encoding
+    encodeList cs = E.encodeString (toText cs)
+instance BiDec Char where
     decode = do t <- D.decodeString
                 if Text.length t == 1
                   then return $! Text.head t
                   else fail "expected a single char, found a string"
 
-    -- For [Char]/String we have a special encoding
-    encodeList cs = E.encodeString (toText cs)
     decodeList    = do txt <- D.decodeString
                        return (toString txt) -- unpack lazily
 
@@ -125,94 +135,108 @@ instance Bi Char where
 -- Numeric data
 ----------------------------------------------------------------------------
 
-instance Bi Integer where
+instance BiEnc Integer where
     encode = E.encodeInteger
+instance BiDec Integer where
     decode = D.decodeIntegerCanonical
 
-instance Bi Word where
+instance BiEnc Word where
     encode = E.encodeWord
+instance BiDec Word where
     decode = D.decodeWordCanonical
 
-instance Bi Word8 where
+instance BiEnc Word8 where
     encode = E.encodeWord8
+instance BiDec Word8 where
     decode = D.decodeWord8Canonical
 
-instance Bi Word16 where
+instance BiEnc Word16 where
     encode = E.encodeWord16
+instance BiDec Word16 where
     decode = D.decodeWord16Canonical
 
-instance Bi Word32 where
+instance BiEnc Word32 where
     encode = E.encodeWord32
+instance BiDec Word32 where
     decode = D.decodeWord32Canonical
 
-instance Bi Word64 where
+instance BiEnc Word64 where
     encode = E.encodeWord64
+instance BiDec Word64 where
     decode = D.decodeWord64Canonical
 
-instance Bi Int where
+instance BiEnc Int where
     encode = E.encodeInt
+instance BiDec Int where
     decode = D.decodeIntCanonical
 
-instance Bi Float where
+instance BiEnc Float where
     encode = E.encodeFloat
+instance BiDec Float where
     decode = D.decodeFloatCanonical
 
-instance Bi Int32 where
+instance BiEnc Int32 where
     encode = E.encodeInt32
+instance BiDec Int32 where
     decode = D.decodeInt32Canonical
 
-instance Bi Int64 where
+instance BiEnc Int64 where
     encode = E.encodeInt64
+instance BiDec Int64 where
     decode = D.decodeInt64Canonical
 
-instance Bi Nano where
+instance BiEnc Nano where
     encode (MkFixed resolution) = encode resolution
+instance BiDec Nano where
     decode = MkFixed <$> decode
 
-instance Bi Void where
-    decode = fail "instance Bi Void: you shouldn't try to deserialize Void"
+instance BiEnc Void where
     encode = error "instance Bi Void: you shouldn't try to serialize Void"
+instance BiDec Void where
+    decode = fail "instance Bi Void: you shouldn't try to deserialize Void"
 
 ----------------------------------------------------------------------------
 -- Tagged
 ----------------------------------------------------------------------------
 
-instance (Typeable s, Bi a) => Bi (Tagged s a) where
+instance (Typeable s, BiEnc a) => BiEnc (Tagged s a) where
     encode (Tagged a) = encode a
+instance (Typeable s, BiDec a) => BiDec (Tagged s a) where
     decode = Tagged <$> decode
 
 ----------------------------------------------------------------------------
 -- Containers
 ----------------------------------------------------------------------------
 
-instance (Bi a, Bi b) => Bi (a,b) where
+instance (BiEnc a, BiEnc b) => BiEnc (a,b) where
     encode (a,b) = E.encodeListLen 2
                 <> encode a
                 <> encode b
+instance (BiDec a, BiDec b) => BiDec (a,b) where
     decode = do D.decodeListLenCanonicalOf 2
                 !x <- decode
                 !y <- decode
                 return (x, y)
 
-instance (Bi a, Bi b, Bi c) => Bi (a,b,c) where
+instance (BiEnc a, BiEnc b, BiEnc c) => BiEnc (a,b,c) where
     encode (a,b,c) = E.encodeListLen 3
                   <> encode a
                   <> encode b
                   <> encode c
-
+instance (BiDec a, BiDec b, BiDec c) => BiDec (a,b,c) where
     decode = do D.decodeListLenCanonicalOf 3
                 !x <- decode
                 !y <- decode
                 !z <- decode
                 return (x, y, z)
 
-instance (Bi a, Bi b, Bi c, Bi d) => Bi (a,b,c,d) where
+instance (BiEnc a, BiEnc b, BiEnc c, BiEnc d) => BiEnc (a,b,c,d) where
     encode (a,b,c,d) = E.encodeListLen 4
                     <> encode a
                     <> encode b
                     <> encode c
                     <> encode d
-
+instance (BiDec a, BiDec b, BiDec c, BiDec d) => BiDec (a,b,c,d) where
     decode = do D.decodeListLenCanonicalOf 4
                 !a <- decode
                 !b <- decode
@@ -220,26 +244,30 @@ instance (Bi a, Bi b, Bi c, Bi d) => Bi (a,b,c,d) where
                 !d <- decode
                 return (a, b, c, d)
 
-instance Bi BS.ByteString where
+instance BiEnc BS.ByteString where
     encode = E.encodeBytes
+instance BiDec BS.ByteString where
     decode = D.decodeBytes
 
-instance Bi Text.Text where
+instance BiEnc Text.Text where
     encode = E.encodeString
+instance BiDec Text.Text where
     decode = D.decodeString
 
-instance Bi BS.Lazy.ByteString where
+instance BiEnc BS.Lazy.ByteString where
     encode = encode . BS.Lazy.toStrict
+instance BiDec BS.Lazy.ByteString where
     decode = BS.Lazy.fromStrict <$> decode
 
-instance Bi a => Bi [a] where
+instance BiEnc a => BiEnc [a] where
     encode = encodeList
+instance BiDec a => BiDec [a] where
     decode = decodeList
 
-instance (Bi a, Bi b) => Bi (Either a b) where
+instance (BiEnc a, BiEnc b) => BiEnc (Either a b) where
     encode (Left  x) = E.encodeListLen 2 <> E.encodeWord 0 <> encode x
     encode (Right x) = E.encodeListLen 2 <> E.encodeWord 1 <> encode x
-
+instance (BiDec a, BiDec b) => BiDec (Either a b) where
     decode = do D.decodeListLenCanonicalOf 2
                 t <- D.decodeWordCanonical
                 case t of
@@ -249,17 +277,18 @@ instance (Bi a, Bi b) => Bi (Either a b) where
                           return (Right x)
                   _ -> fail $ "decode@Either: unknown tag " <> show t
 
-instance Bi a => Bi (NonEmpty a) where
+instance BiEnc a => BiEnc (NonEmpty a) where
     encode = defaultEncodeList . toList
+instance BiDec a => BiDec (NonEmpty a) where
     decode =
         nonEmpty <$> defaultDecodeList >>= \case
             Nothing -> fail "Expected a NonEmpty list, but an empty list was found!"
             Just xs -> return xs
 
-instance Bi a => Bi (Maybe a) where
+instance BiEnc a => BiEnc (Maybe a) where
     encode Nothing  = E.encodeListLen 0
     encode (Just x) = E.encodeListLen 1 <> encode x
-
+instance BiDec a => BiDec (Maybe a) where
     decode = do n <- D.decodeListLenCanonical
                 case n of
                   0 -> return Nothing
@@ -278,7 +307,7 @@ encodeContainerSkel encodeLen size foldFunction f  c =
 {-# INLINE encodeContainerSkel #-}
 
 decodeContainerSkelWithReplicate
-  :: Bi a
+  :: BiDec a
   => D.Decoder s Int
      -- ^ How to get the size of the container
   -> (Int -> D.Decoder s a -> D.Decoder s container)
@@ -308,7 +337,7 @@ decodeContainerSkelWithReplicate decodeLen replicateFun fromList = do
            return $! fromList containers
 {-# INLINE decodeContainerSkelWithReplicate #-}
 
-encodeMapSkel :: (Bi k, Bi v)
+encodeMapSkel :: (BiEnc k, BiEnc v)
               => (m -> Int)
               -> ((k -> v -> E.Encoding -> E.Encoding) -> E.Encoding -> m -> E.Encoding)
               -> m
@@ -325,7 +354,7 @@ encodeMapSkel size foldrWithKey =
 -- the previous one, to enfore these are sorted the correct way.
 -- See: https://tools.ietf.org/html/rfc7049#section-3.9
 -- "[..]The keys in every map must be sorted lowest value to highest.[...]"
-decodeMapSkel :: (Ord k, Bi k, Bi v) => ([(k,v)] -> m) -> D.Decoder s m
+decodeMapSkel :: (Ord k, BiDec k, BiDec v) => ([(k,v)] -> m) -> D.Decoder s m
 decodeMapSkel fromDistinctAscList = do
     n <- D.decodeMapLenCanonical
     case n of
@@ -335,7 +364,7 @@ decodeMapSkel fromDistinctAscList = do
             fromDistinctAscList <$> decodeEntries (n - 1) firstKey [(firstKey, firstValue)]
   where
     -- Decode a single (k,v).
-    decodeEntry :: (Bi k, Bi v) => D.Decoder s (k,v)
+    decodeEntry :: (BiDec k, BiDec v) => D.Decoder s (k,v)
     decodeEntry = do
         !k <- decode
         !v <- decode
@@ -343,7 +372,7 @@ decodeMapSkel fromDistinctAscList = do
 
     -- Decode all the entries, enforcing canonicity by ensuring that the
     -- previous key is smaller than the next one.
-    decodeEntries :: (Bi k, Bi v, Ord k) => Int -> k -> [(k,v)] -> D.Decoder s [(k,v)]
+    decodeEntries :: (BiDec k, BiDec v, Ord k) => Int -> k -> [(k,v)] -> D.Decoder s [(k,v)]
     decodeEntries 0 _ acc = pure $ reverse acc
     decodeEntries !remainingPairs previousKey !acc = do
         p@(newKey, _) <- decodeEntry
@@ -356,18 +385,20 @@ decodeMapSkel fromDistinctAscList = do
             False -> fail "Canonicity violation whilst decoding a Map!"
 {-# INLINE decodeMapSkel #-}
 
-instance (Hashable k, Ord k, Bi k, Bi v) => Bi (HM.HashMap k v) where
+instance (Hashable k, Ord k, BiEnc k, BiEnc v) => BiEnc (HM.HashMap k v) where
     encode = encodeMapSkel HM.size $ \f acc ->
         -- We need to encode the list with keys sorted in ascending order as
         -- that's the only representation we accept during decoding.
         foldr (uncurry f) acc . sortWith fst . HM.toList
+instance (Hashable k, Ord k, BiDec k, BiDec v) => BiDec (HM.HashMap k v) where
     decode = decodeMapSkel HM.fromList
 
-instance (Ord k, Bi k, Bi v) => Bi (Map k v) where
+instance (Ord k, BiEnc k, BiEnc v) => BiEnc (Map k v) where
     encode = encodeMapSkel M.size M.foldrWithKey
+instance (Ord k, BiDec k, BiDec v) => BiDec (Map k v) where
     decode = decodeMapSkel M.fromDistinctAscList
 
-encodeSetSkel :: Bi a
+encodeSetSkel :: BiEnc a
               => (s -> Int)
               -> ((a -> E.Encoding -> E.Encoding) -> E.Encoding -> s -> E.Encoding)
               -> s
@@ -395,7 +426,7 @@ decodeSetTag = do
     t <- D.decodeTagCanonical
     when (t /= setTag) $ fail ("decodeSetTag: this doesn't appear to be a Set. Found tag: " <> show t)
 
-decodeSetSkel :: (Ord a, Bi a) => ([a] -> c) -> D.Decoder s c
+decodeSetSkel :: (Ord a, BiDec a) => ([a] -> c) -> D.Decoder s c
 decodeSetSkel fromDistinctAscList = do
     decodeSetTag
     n <- D.decodeListLenCanonical
@@ -405,7 +436,7 @@ decodeSetSkel fromDistinctAscList = do
             firstValue <- decode
             fromDistinctAscList <$> decodeEntries (n - 1) firstValue [firstValue]
   where
-    decodeEntries :: (Bi v, Ord v) => Int -> v -> [v] -> D.Decoder s [v]
+    decodeEntries :: (BiDec v, Ord v) => Int -> v -> [v] -> D.Decoder s [v]
     decodeEntries 0 _ acc = pure $ reverse acc
     decodeEntries !remainingEntries previousValue !acc = do
         newValue <- decode
@@ -417,20 +448,22 @@ decodeSetSkel fromDistinctAscList = do
             False -> fail "Canonicity violation whilst decoding a Set!"
 {-# INLINE decodeSetSkel #-}
 
-instance (Hashable a, Ord a, Bi a) => Bi (HashSet a) where
+instance (Hashable a, Ord a, BiEnc a) => BiEnc (HashSet a) where
     encode = encodeSetSkel HS.size $ \f acc ->
         -- We need to encode the list sorted in ascending order as that's the only
         -- representation we accept during decoding.
         foldr f acc . sort . HS.toList
+instance (Hashable a, Ord a, BiDec a) => BiDec (HashSet a) where
     decode = decodeSetSkel HS.fromList
 
-instance (Ord a, Bi a) => Bi (Set a) where
+instance (Ord a, BiEnc a) => BiEnc (Set a) where
     encode = encodeSetSkel S.size S.foldr
+instance (Ord a, BiDec a) => BiDec (Set a) where
     decode = decodeSetSkel S.fromDistinctAscList
 
 -- | Generic encoder for vectors. Its intended use is to allow easy
 -- definition of 'Serialise' instances for custom vector
-encodeVector :: (Bi a, Vector.Generic.Vector v a)
+encodeVector :: (BiEnc a, Vector.Generic.Vector v a)
              => v a -> E.Encoding
 encodeVector = encodeContainerSkel
     E.encodeListLen
@@ -441,7 +474,7 @@ encodeVector = encodeContainerSkel
 
 -- | Generic decoder for vectors. Its intended use is to allow easy
 -- definition of 'Serialise' instances for custom vector
-decodeVector :: (Bi a, Vector.Generic.Vector v a)
+decodeVector :: (BiDec a, Vector.Generic.Vector v a)
              => D.Decoder s (v a)
 decodeVector = decodeContainerSkelWithReplicate
     D.decodeListLenCanonical
@@ -449,9 +482,10 @@ decodeVector = decodeContainerSkelWithReplicate
     Vector.Generic.concat
 {-# INLINE decodeVector #-}
 
-instance (Bi a) => Bi (Vector.Vector a) where
+instance (BiEnc a) => BiEnc (Vector.Vector a) where
   encode = encodeVector
   {-# INLINE encode #-}
+instance (BiDec a) => BiDec (Vector.Vector a) where
   decode = decodeVector
   {-# INLINE decode #-}
 
@@ -459,16 +493,19 @@ instance (Bi a) => Bi (Vector.Vector a) where
 -- Other types
 ----------------------------------------------------------------------------
 
-instance Bi Millisecond where
+instance BiEnc Millisecond where
     encode = encode . toInteger
+instance BiDec Millisecond where
     decode = fromInteger <$> decode
 
-instance Bi Microsecond where
+instance BiEnc Microsecond where
     encode = encode . toInteger
+instance BiDec Microsecond where
     decode = fromInteger <$> decode
 
-instance Bi Byte where
+instance BiEnc Byte where
     encode = encode . toBytes
+instance BiDec Byte where
     decode = fromBytes <$> decode
 
 ----------------------------------------------------------------------------

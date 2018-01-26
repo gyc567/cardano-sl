@@ -1,5 +1,3 @@
-{-# LANGUAGE DataKinds #-}
-
 -- | Module for safe (zero-memory) signing.
 
 module Pos.Crypto.Signing.Safe
@@ -35,7 +33,6 @@ import           Pos.Crypto.Signing.Signing (ProxyCert (..), ProxySecretKey (..)
                                              SecretKey (..), Signature (..), sign, toPublic)
 import           Pos.Crypto.Signing.Tag (SignTag (SignProxySK), signTag)
 import           Pos.Crypto.Signing.Types.Safe
-import           Pos.Util.Verification (Ver (..))
 
 -- | Regenerates secret key with new passphrase.
 -- Note: This operation keeps corresponding public key and derived (child) keys unchanged.
@@ -158,7 +155,7 @@ safeCreatePsk ::
     => SafeSigner
     -> PublicKey
     -> w
-    -> ProxySecretKey 'Ver w
+    -> ProxySecretKey w
 safeCreatePsk ss delegatePk w =
     UnsafeProxySecretKey
         w
@@ -181,5 +178,5 @@ createPsk ::
     => SecretKey
     -> PublicKey
     -> w
-    -> ProxySecretKey 'Ver w
+    -> ProxySecretKey w
 createPsk = safeCreatePsk . fakeSigner

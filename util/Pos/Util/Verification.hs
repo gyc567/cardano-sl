@@ -5,12 +5,16 @@
 -- See docs/proposals/serialization.md.
 
 module Pos.Util.Verification
-    ( Ver(..)
+    ( Unver
+    , mkUnver
+
     , VerM
     , verMFail
-    , verMToEither
-    , verMToFail
     , verMField
+
+    , Verifiable(..)
+    , runVerify
+    , runVerifyFail
     ) where
 
 import           Universum
@@ -19,11 +23,30 @@ import qualified Data.Text as T
 
 import           Pos.Util.Util (eitherToThrow)
 
+----------------------------------------------------------------------------
+-- Unver wrapper
+----------------------------------------------------------------------------
+
 -- | Verification datatype. For now we support only two levels of data
 -- verification.
-data Ver = Ver | Unver
+newtype Unver a = Unver
+    { getUnverUnsafe :: a
+    } deriving (Functor, Eq, Ord)
 
-newtype VerM c = VerM (Either [Text] c) deriving (Show,Eq,Functor,Applicative,Monad)
+instance Applicative Unver where
+    pure = Unver
+    (Unver a) <*> (Unver b) = Unver (a b)
+
+mkUnver :: a -> Unver a
+mkUnver = Unver
+
+----------------------------------------------------------------------------
+-- VerM
+----------------------------------------------------------------------------
+
+newtype VerM c = VerM
+    { getVerM :: Either [Text] c
+    } deriving (Show, Eq, Functor, Applicative, Monad)
 
 data VerError = VerError Text deriving (Show)
 
@@ -32,13 +55,21 @@ instance Exception VerError
 verMFail :: Text -> VerM c
 verMFail t = VerM (Left [t])
 
-verMToEither :: VerM c -> Either VerError c
-verMToEither (VerM x) = first (VerError . T.intercalate "." . reverse) x
-
-verMToFail :: (MonadThrow m) => VerM c -> m c
-verMToFail = eitherToThrow . verMToEither
-
 -- | Verifies some field, prefixing with the text value in case of
 -- error. Prefix is supposed to be the record field name.
 verMField :: Text -> VerM c -> VerM c
 verMField p (VerM v) = VerM $ first (\x -> p:x) v
+
+----------------------------------------------------------------------------
+-- Verifiable
+----------------------------------------------------------------------------
+
+-- | Things that can be verified
+class Verifiable a where
+    verify :: a -> VerM a
+
+runVerify :: (Verifiable a) => Unver a -> Either VerError a
+runVerify (Unver a) = first (VerError . T.intercalate "." . reverse) . getVerM $ verify a
+
+runVerifyFail :: (MonadThrow m, Verifiable a) => Unver a -> m a
+runVerifyFail = eitherToThrow . runVerify

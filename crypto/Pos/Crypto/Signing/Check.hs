@@ -10,8 +10,6 @@
 module Pos.Crypto.Signing.Check
        ( checkSig
        , checkSigRaw
-       , toVerPsk
-       , toVerProxySignature
        ) where
 
 import           Universum
@@ -25,7 +23,7 @@ import           Pos.Crypto.Configuration (HasCryptoConfiguration)
 import           Pos.Crypto.Signing.Tag (signTag)
 import           Pos.Crypto.Signing.Types (ProxyCert (..), ProxySecretKey (..), ProxySignature (..),
                                            PublicKey (..), SignTag (..), Signature (..))
-import           Pos.Util.Verification (Ver (..), VerM, verMFail, verMField)
+import           Pos.Util.Verification (Verifiable (..), verMFail, verMField)
 
 -- CHECK: @checkSig
 -- | Verify a signature.
@@ -65,19 +63,15 @@ verifyProxyCert issuerPk (PublicKey delegatePk) o (ProxyCert sig) =
         (mconcat ["00", CC.unXPub delegatePk, Bi.serialize' o])
         (Signature sig)
 
-toVerPsk ::
-       (Bi w, Buildable w, Bi PublicKey, HasCryptoConfiguration)
-    => ProxySecretKey 'Unver w
-    -> VerM (ProxySecretKey 'Ver w)
-toVerPsk psk@UnsafeProxySecretKey{..} = do
-    unless (verifyProxyCert pskIssuerPk pskDelegatePk pskOmega pskCert) $
-        verMFail $ "PSK " <> pretty psk <> " is invalid"
-    pure $ coerce psk
+instance (Bi w, Buildable w, Bi PublicKey, HasCryptoConfiguration) =>
+         Verifiable (ProxySecretKey w) where
+  verify psk@UnsafeProxySecretKey{..} = do
+      unless (verifyProxyCert pskIssuerPk pskDelegatePk pskOmega pskCert) $
+          verMFail $ "PSK " <> pretty psk <> " is invalid"
+      pure $ coerce psk
 
-toVerProxySignature ::
-       (Bi w, Buildable w, Bi PublicKey, HasCryptoConfiguration)
-    => ProxySignature 'Unver w a
-    -> VerM (ProxySignature 'Ver w a)
-toVerProxySignature UnsafeProxySignature {..} = do
-    psigPsk' <- verMField "psigPsk" $ toVerPsk psigPsk
+instance (Bi w, Buildable w, Bi PublicKey, HasCryptoConfiguration) =>
+         Verifiable (ProxySignature w a) where
+  verify UnsafeProxySignature {..} = do
+    psigPsk' <- verMField "psigPsk" $ verify psigPsk
     pure $ UnsafeProxySignature psigPsk' psigSig
