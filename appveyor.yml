@@ -11,8 +11,8 @@ environment:
     WORK_DIR: "c:\\w"
     CACHE_S3_VERSION: v0.1.1
     AWS_REGION: us-west-1
-    S3_BUCKET: appveyor-ci-cache              
-    AWS_ACCESS_KEY_ID: 
+    S3_BUCKET: appveyor-ci-cache
+    AWS_ACCESS_KEY_ID:
       secure: 0OtMCUmJ4V7fNRPvKjzYxSO19I200rPG8WRW/qn1QPk=
     AWS_SECRET_ACCESS_KEY:
       secure: EmPAMpga8gjXxPMfJSsdq2sof8SLwyga1rrYuZDlPoriMS1iEFLvCNLA70JqHSna
@@ -93,7 +93,8 @@ test_script:
       --extra-lib-dirs="%WORK_DIR%"
   - stack exec -- cardano-wallet-hs2purs
   # Prepare files for frontend build
-  - copy log-config-prod.yaml daedalus\
+    # log config is called `log-config-prod.yaml` just in case, it's old name
+  - copy log-configs\daedalus.yaml daedalus\log-config-prod.yaml
   - copy lib\configuration.yaml daedalus\
   - copy lib\*genesis*.json daedalus\
   - copy cardano-launcher.exe daedalus\
