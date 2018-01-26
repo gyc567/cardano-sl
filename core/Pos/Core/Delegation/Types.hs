@@ -12,6 +12,7 @@ module Pos.Core.Delegation.Types
        , ProxySKHeavy
 
        , DlgPayload (..)
+       , toVerUnsafeDlgPayload
        , DlgProof
        , mkDlgProof
        ) where
@@ -20,6 +21,7 @@ import           Universum
 
 import           Data.Coerce (coerce)
 import           Data.Default (Default (def))
+import qualified Data.Set as S
 import qualified Data.Text.Buildable
 import           Formatting (bprint, build, int, (%))
 import           Serokell.Util (listJson, pairF)
@@ -42,7 +44,7 @@ import           Pos.Util.Verification (Ver (..))
 -- inside this range.
 data LightDlgIndices =
     LightDlgIndices { getLightDlgIndices :: (EpochIndex, EpochIndex) }
-    deriving (Show, Eq, Generic)
+    deriving (Show, Eq, Ord, Generic)
 
 instance NFData LightDlgIndices
 
@@ -63,7 +65,7 @@ type ProxySKLight v = ProxySecretKey v LightDlgIndices
 -- in).
 data HeavyDlgIndex =
     HeavyDlgIndex { getHeavyDlgIndex :: EpochIndex }
-    deriving (Show, Eq, Generic)
+    deriving (Show, Eq, Ord, Generic)
 
 instance NFData HeavyDlgIndex
 
@@ -80,28 +82,27 @@ type ProxySKHeavy v = ProxySecretKey v HeavyDlgIndex
 -- Payload
 ----------------------------------------------------------------------------
 
--- Consider making this a set.
--- | 'DlgPayload' is put into 'MainBlock' and consists of a list of
--- heavyweight proxy signing keys. There must be no duplicates
--- (comparing by issuer) in this list. The order of PSKs doesn't
--- matter, as it's checked for cycles after bulk application. So it's
--- technically a set.
+-- | 'DlgPayload' is put into 'MainBlock' and is a set of heavyweight
+-- proxy signing keys.
 newtype DlgPayload v = UnsafeDlgPayload
-    { getDlgPayload :: [ProxySKHeavy v]
+    { getDlgPayload :: Set (ProxySKHeavy v)
     } deriving (Show, Eq, Generic, NFData)
 
 instance Default (DlgPayload v) where
-    def = UnsafeDlgPayload []
+    def = UnsafeDlgPayload mempty
 
 instance Buildable (DlgPayload v) where
     build (UnsafeDlgPayload psks) =
         bprint
             ("proxy signing keys ("%int%" items): "%listJson%"\n")
-            (length psks) psks
+            (S.size psks) (toList psks)
+
+toVerUnsafeDlgPayload :: DlgPayload 'Unver -> DlgPayload 'Ver
+toVerUnsafeDlgPayload = undefined
 
 -- | Proof of delegation payload.
 type DlgProof = Hash (DlgPayload 'Ver)
 
 -- | Creates 'DlgProof' out of delegation payload.
-mkDlgProof :: (Bi (DlgPayload 'Unver)) => DlgPayload v -> DlgProof
-mkDlgProof p = unsafeHash (coerce p :: DlgPayload 'Unver)
+mkDlgProof :: (Bi (DlgPayload 'Unver)) => DlgPayload 'Unver -> DlgProof
+mkDlgProof p = unsafeHash p

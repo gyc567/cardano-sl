@@ -50,10 +50,6 @@ instance Blockchain (GenesisBlockchain v) where
 instance Buildable (BodyProof (GenesisBlockchain v)) where
     build (GenesisProof h) = Buildable.build h
 
-instance BlockchainHelpers (GenesisBlockchain v) where
-    verifyBBlockHeader _ = pure ()
-    verifyBBlock _ = pure ()
-
 instance NFData (BodyProof (GenesisBlockchain v))
 instance NFData (ConsensusData (GenesisBlockchain v))
 instance NFData (Body (GenesisBlockchain v))

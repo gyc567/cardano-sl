@@ -1,4 +1,5 @@
 {-# LANGUAGE AllowAmbiguousTypes #-}
+{-# LANGUAGE DataKinds           #-}
 {-# LANGUAGE Rank2Types          #-}
 {-# LANGUAGE TypeFamilies        #-}
 {-# LANGUAGE TypeOperators       #-}
@@ -63,8 +64,10 @@ import           Pos.Binary.Core ()
 import           Pos.Core (Block, BlockVersionData (..), EpochIndex, HasConfiguration, HeaderHash,
                            isBootstrapEra)
 import           Pos.Core.Block (BlockchainHelpers, MainBlockchain)
+import           Pos.Core.Verification (toVerUnsafeBlock)
 import           Pos.DB.Error (DBError (DBMalformed))
 import           Pos.Util.Util (eitherToThrow)
+import           Pos.Util.Verification (Ver (..))
 
 ----------------------------------------------------------------------------
 -- Pure
@@ -127,7 +130,7 @@ instance {-# OVERLAPPABLE #-}
     dbGetSerUndo = lift . dbGetSerUndo
 
 
-type MonadBlockDBRead m = (MonadDBRead m, BlockchainHelpers MainBlockchain)
+type MonadBlockDBRead m = (MonadDBRead m, BlockchainHelpers (MainBlockchain 'Ver))
 
 getDeserialized
     :: (MonadBlockDBRead m, Bi v)
@@ -136,8 +139,8 @@ getDeserialized getter x = getter x >>= \case
     Nothing  -> pure Nothing
     Just ser -> eitherToThrow $ bimap DBMalformed Just $ decodeFull' $ unSerialized ser
 
-getBlock :: MonadBlockDBRead m => HeaderHash -> m (Maybe Block)
-getBlock = getDeserialized dbGetSerBlock
+getBlock :: MonadBlockDBRead m => HeaderHash -> m (Maybe (Block 'Ver))
+getBlock hh = fmap toVerUnsafeBlock <$> getDeserialized dbGetSerBlock hh
 
 -- | Pure interface to the database. Combines read-only interface and
 -- ability to put raw bytes.
@@ -166,7 +169,7 @@ class MonadDBRead m => MonadDB m where
     dbDelete :: DBTag -> ByteString -> m ()
 
     -- | Put given blund into the Block DB.
-    dbPutSerBlund :: (Block, SerializedUndo) -> m ()
+    dbPutSerBlund :: ((Block 'Ver), SerializedUndo) -> m ()
 
 instance {-# OVERLAPPABLE #-}
     (MonadDB m, MonadTrans t, MonadThrow (t m), MonadBaseControl IO (t m)) =>

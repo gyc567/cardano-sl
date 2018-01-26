@@ -16,7 +16,6 @@ instance ( Typeable b
          , Bi (T.BodyProof b)
          , Bi (T.ConsensusData b)
          , Bi (T.ExtraHeaderData b)
-         , T.BlockchainHelpers b
          , HasCryptoConfiguration
          ) =>
          Bi (T.GenericBlockHeader b) where
@@ -44,7 +43,6 @@ instance ( Typeable b
          , Bi (T.ExtraHeaderData b)
          , Bi (T.Body b)
          , Bi (T.ExtraBodyData b)
-         , T.BlockchainHelpers b
          , HasCryptoConfiguration
          ) =>
          Bi (T.GenericBlock b) where

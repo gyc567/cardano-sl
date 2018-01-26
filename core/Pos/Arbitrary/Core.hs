@@ -559,6 +559,10 @@ instance Arbitrary Second where
 deriving instance Arbitrary Types.Timestamp
 deriving instance Arbitrary Types.TimeDiff
 
+instance Arbitrary HeavyDlgIndex where
+    arbitrary = HeavyDlgIndex <$> arbitrary
+    shrink = genericShrink
+
 ----------------------------------------------------------------------------
 -- SSC
 ----------------------------------------------------------------------------

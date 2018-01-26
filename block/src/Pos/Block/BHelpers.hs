@@ -30,6 +30,11 @@ import           Pos.Delegation.Helpers (dlgVerifyPayload)
 import           Pos.Ssc.Functions (verifySscPayload)
 import           Pos.Util.Some (Some (Some))
 
+
+instance BlockchainHelpers (GenesisBlockchain v) where
+    verifyBBlockHeader _ = pure ()
+    verifyBBlock _ = pure ()
+
 instance ( Bi BlockHeader
          , HasConfiguration
          , IsMainHeader MainBlockHeader

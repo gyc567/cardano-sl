@@ -49,6 +49,8 @@ library
                        Pos.Core.Txp
                        Pos.Core.Update
 
+                       Pos.Core.Verification
+
                        Pos.Data.Attributes
                        Pos.Exception
                        Pos.Merkle
@@ -104,7 +106,6 @@ library
 
                        -- Delegation
                        Pos.Core.Delegation.Types
-                       Pos.Core.Delegation.Util
 
                        -- Genesis
                        Pos.Core.Genesis.Canonical
